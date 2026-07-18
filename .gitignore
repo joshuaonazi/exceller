@@ -1,0 +1,11 @@
+﻿.history
+node_modules/
+dist/
+.vscode/
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+.idea/
