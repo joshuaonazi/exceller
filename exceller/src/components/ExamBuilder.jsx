@@ -30,6 +30,7 @@ function randomAccessCode() {
 
 export default function ExamBuilder() {
   const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [view, setView] = useState('list'); // 'list' | 'create' | 'created'
 
   const [myExams, setMyExams] = useState([]);
@@ -54,8 +55,22 @@ export default function ExamBuilder() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      setAuthChecked(true);
     });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => listener.subscription.unsubscribe();
   }, []);
+
+  const signInWithGoogle = () => {
+    supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.href },
+    });
+  };
 
   const loadMyExams = useCallback(async () => {
     if (!user) return;
@@ -180,8 +195,26 @@ export default function ExamBuilder() {
   // RENDER
   // ==========================================================================
 
-  if (!user) {
+  if (!authChecked) {
     return <CenteredMessage text="Loading…" />;
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="bg-white shadow-md rounded-2xl p-8 w-full max-w-md text-center">
+          <p className="text-sm font-semibold tracking-wide text-blue-600 mb-1">EXCELLER</p>
+          <h1 className="text-xl font-semibold mb-4">Admin Sign In</h1>
+          <p className="text-gray-600 mb-6">Sign in with Google to create and manage exams.</p>
+          <button
+            onClick={signInWithGoogle}
+            className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition"
+          >
+            Sign in with Google
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
