@@ -124,7 +124,17 @@ export default function ProctoredTestPlayer() {
       });
       if (attemptErr) throw attemptErr;
 
-      const { started_at, duration_minutes, show_results } = attemptRows[0];
+      const { started_at, duration_minutes, show_results, already_submitted, prior_score } =
+        attemptRows[0];
+
+      // Student already completed this exam — refresh/re-entry must NOT
+      // let them retake it. Route straight to the result screen instead.
+      if (already_submitted) {
+        setShowResultsFlag(show_results);
+        setFinalScore(prior_score);
+        setPhase('submitted');
+        return;
+      }
 
       const { data: serverNowIso, error: timeErr } = await supabase.rpc('get_server_time');
       if (timeErr) throw timeErr;
