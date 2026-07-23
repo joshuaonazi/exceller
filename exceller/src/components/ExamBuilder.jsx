@@ -35,6 +35,8 @@ export default function ExamBuilder() {
 
   const [myExams, setMyExams] = useState([]);
   const [loadingExams, setLoadingExams] = useState(true);
+  const [deletingExamId, setDeletingExamId] = useState(null);
+  const [deleteError, setDeleteError] = useState('');
 
   // ---- Exam meta fields ----------------------------------------------------
   const [title, setTitle] = useState('');
@@ -88,6 +90,27 @@ export default function ExamBuilder() {
   useEffect(() => {
     loadMyExams();
   }, [loadMyExams]);
+
+  const handleDeleteExam = async (exam) => {
+    if (!window.confirm(`Delete "${exam.title}"? This cannot be undone.`)) return;
+
+    setDeleteError('');
+    setDeletingExamId(exam.id);
+
+    const { error } = await supabase
+      .from('exams')
+      .delete()
+      .eq('id', exam.id)
+      .eq('created_by', user.id);
+
+    if (error) {
+      setDeleteError(error.message || 'Failed to delete exam.');
+    } else {
+      setMyExams((prev) => prev.filter((item) => item.id !== exam.id));
+    }
+
+    setDeletingExamId(null);
+  };
 
   // ==========================================================================
   // Question list helpers
@@ -241,7 +264,10 @@ export default function ExamBuilder() {
         <ExamList
           exams={myExams}
           loading={loadingExams}
+          deletingExamId={deletingExamId}
+          deleteError={deleteError}
           onCreateNew={() => setView('create')}
+          onDelete={handleDeleteExam}
         />
       )}
 
@@ -315,7 +341,7 @@ export default function ExamBuilder() {
 // Sub-components
 // ============================================================================
 
-function ExamList({ exams, loading, onCreateNew }) {
+function ExamList({ exams, loading, deletingExamId, deleteError, onCreateNew, onDelete }) {
   return (
     <div className="flex flex-col gap-4">
       <button
@@ -348,9 +374,23 @@ function ExamList({ exams, loading, onCreateNew }) {
               >
                 Open link →
               </a>
+              <button
+                type="button"
+                onClick={() => onDelete(exam)}
+                disabled={deletingExamId === exam.id}
+                className="text-sm text-red-600 hover:text-red-800 disabled:opacity-50 whitespace-nowrap ml-4"
+              >
+                {deletingExamId === exam.id ? 'Deleting…' : 'Delete'}
+              </button>
             </div>
           ))}
         </div>
+      )}
+
+      {deleteError && (
+        <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+          {deleteError}
+        </p>
       )}
     </div>
   );
