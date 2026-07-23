@@ -33,6 +33,7 @@ export default function ProctoredTestPlayer() {
   const [codeError, setCodeError] = useState('');
 
   // ---- Exam data ------------------------------------------------------
+  const [examTitle, setExamTitle] = useState('');
   const [duration, setDuration] = useState(0);       // minutes
   const [showResultsFlag, setShowResultsFlag] = useState(false);
   const [questions, setQuestions] = useState([]);
@@ -92,9 +93,18 @@ export default function ProctoredTestPlayer() {
     });
   };
 
-  // ==========================================================================
-  // 2. ACCESS CODE GATE
-  // ==========================================================================
+  // Fetch the exam title early so it can be shown on every gate screen
+  // (sign-in, access code) — not just once the test itself has started.
+  useEffect(() => {
+    supabase
+      .from('exams_public')
+      .select('title')
+      .eq('id', examId)
+      .single()
+      .then(({ data }) => {
+        if (data) setExamTitle(data.title);
+      });
+  }, [examId, user]);
   const submitAccessCode = async (e) => {
     e.preventDefault();
     setCodeError('');
@@ -135,6 +145,14 @@ export default function ProctoredTestPlayer() {
 
       const { started_at, duration_minutes, show_results, already_submitted, prior_score } =
         attemptRows[0];
+
+      const { data: examMeta, error: examMetaErr } = await supabase
+        .from('exams_public')
+        .select('title')
+        .eq('id', examId)
+        .single();
+      if (examMetaErr) throw examMetaErr;
+      setExamTitle(examMeta.title);
 
       // Student already completed this exam — refresh/re-entry must NOT
       // let them retake it. Route straight to the result screen instead.
@@ -285,6 +303,7 @@ export default function ProctoredTestPlayer() {
     return (
       <CenteredCard>
         <p className="text-sm font-semibold tracking-wide text-blue-600 mb-1">EXCELLER</p>
+        {examTitle && <p className="text-sm text-gray-500 mb-2">{examTitle}</p>}
         <h1 className="text-xl font-semibold mb-4">Sign in to continue</h1>
         <p className="text-gray-600 mb-6">You must sign in with Google to access this exam.</p>
         <button
@@ -301,6 +320,7 @@ export default function ProctoredTestPlayer() {
     return (
       <CenteredCard>
         <p className="text-sm font-semibold tracking-wide text-blue-600 mb-1">EXCELLER</p>
+        {examTitle && <p className="text-sm text-gray-500 mb-2">{examTitle}</p>}
         <h1 className="text-xl font-semibold mb-4">Enter Access Code</h1>
         <p className="text-gray-600 mb-4">Signed in as {user?.email}</p>
         <form onSubmit={submitAccessCode} className="flex flex-col gap-3">
@@ -352,13 +372,16 @@ export default function ProctoredTestPlayer() {
         onCut={blockClipboardEvent}
         onContextMenu={blockClipboardEvent}
       >
-        {/* Sticky header: brand + timer + strike indicator */}
-        <div className="sticky top-0 bg-white border-b py-3 mb-6 flex items-center justify-between z-10">
-          <span className="font-semibold text-blue-600 tracking-tight">Exceller</span>
-          <TimerBadge secondsLeft={secondsLeft} />
-          <span className="text-sm text-gray-500">
-            Tab switches: <strong>{tabStrikes}</strong> / {MAX_TAB_STRIKES}
-          </span>
+        {/* Sticky header: brand + exam title + timer + strike indicator */}
+        <div className="sticky top-0 bg-white border-b pb-3 mb-6 pt-3 z-10">
+          <div className="flex items-center justify-between mb-1">
+            <span className="font-semibold text-blue-600 tracking-tight">Exceller</span>
+            <TimerBadge secondsLeft={secondsLeft} />
+            <span className="text-sm text-gray-500">
+              Tab switches: <strong>{tabStrikes}</strong> / {MAX_TAB_STRIKES}
+            </span>
+          </div>
+          <h1 className="text-lg font-semibold text-gray-900">{examTitle}</h1>
         </div>
 
         {showStrikeWarning && (
@@ -369,15 +392,26 @@ export default function ProctoredTestPlayer() {
         )}
 
         <div className="flex flex-col gap-6">
-          {questions.map((q, idx) => (
-            <QuestionCard
-              key={q.id}
-              index={idx}
-              question={q}
-              selected={answers[q.id]}
-              onSelect={(choiceKey) => selectAnswer(q.id, choiceKey)}
-            />
-          ))}
+          {questions.map((q, idx) => {
+            const prevSection = idx > 0 ? questions[idx - 1].section_title : null;
+            const showSectionHeader = q.section_title && q.section_title !== prevSection;
+
+            return (
+              <div key={q.id}>
+                {showSectionHeader && (
+                  <h2 className="text-base font-bold text-gray-700 mb-3 mt-2 pb-1 border-b-2 border-blue-100">
+                    {q.section_title}
+                  </h2>
+                )}
+                <QuestionCard
+                  index={idx}
+                  question={q}
+                  selected={answers[q.id]}
+                  onSelect={(choiceKey) => selectAnswer(q.id, choiceKey)}
+                />
+              </div>
+            );
+          })}
         </div>
 
         <button
@@ -394,6 +428,7 @@ export default function ProctoredTestPlayer() {
     return (
       <CenteredCard>
         <p className="text-sm font-semibold tracking-wide text-blue-600 mb-1">EXCELLER</p>
+        {examTitle && <p className="text-sm text-gray-500 mb-2">{examTitle}</p>}
         {showResultsFlag ? (
           <>
             <h1 className="text-xl font-semibold mb-2">Exam Submitted</h1>

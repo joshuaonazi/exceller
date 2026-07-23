@@ -13,6 +13,7 @@ const EMPTY_OPTION_KEYS = ['A', 'B', 'C', 'D'];
 function blankQuestion() {
   return {
     tempId: crypto.randomUUID(),
+    section_title: '',
     question_text: '',
     options: { A: '', B: '', C: '', D: '' },
     correct_answer: 'A',
@@ -35,8 +36,6 @@ export default function ExamBuilder() {
 
   const [myExams, setMyExams] = useState([]);
   const [loadingExams, setLoadingExams] = useState(true);
-  const [deletingExamId, setDeletingExamId] = useState(null);
-  const [deleteError, setDeleteError] = useState('');
 
   // ---- Exam meta fields ----------------------------------------------------
   const [title, setTitle] = useState('');
@@ -91,31 +90,14 @@ export default function ExamBuilder() {
     loadMyExams();
   }, [loadMyExams]);
 
-  const handleDeleteExam = async (exam) => {
-    if (!window.confirm(`Delete "${exam.title}"? This cannot be undone.`)) return;
-
-    setDeleteError('');
-    setDeletingExamId(exam.id);
-
-    const { error } = await supabase
-      .from('exams')
-      .delete()
-      .eq('id', exam.id)
-      .eq('created_by', user.id);
-
-    if (error) {
-      setDeleteError(error.message || 'Failed to delete exam.');
-    } else {
-      setMyExams((prev) => prev.filter((item) => item.id !== exam.id));
-    }
-
-    setDeletingExamId(null);
-  };
-
   // ==========================================================================
   // Question list helpers
   // ==========================================================================
-  const addQuestion = () => setQuestions((prev) => [...prev, blankQuestion()]);
+  const addQuestion = () =>
+    setQuestions((prev) => {
+      const lastSection = prev.length > 0 ? prev[prev.length - 1].section_title : '';
+      return [...prev, { ...blankQuestion(), section_title: lastSection }];
+    });
 
   const removeQuestion = (tempId) =>
     setQuestions((prev) => prev.filter((q) => q.tempId !== tempId));
@@ -183,6 +165,7 @@ export default function ExamBuilder() {
         );
         return {
           exam_id: examRow.id,
+          section_title: q.section_title.trim() || null,
           question_text: q.question_text.trim(),
           options: cleanOptions,
           correct_answer: q.correct_answer,
@@ -264,10 +247,7 @@ export default function ExamBuilder() {
         <ExamList
           exams={myExams}
           loading={loadingExams}
-          deletingExamId={deletingExamId}
-          deleteError={deleteError}
           onCreateNew={() => setView('create')}
-          onDelete={handleDeleteExam}
         />
       )}
 
@@ -341,7 +321,7 @@ export default function ExamBuilder() {
 // Sub-components
 // ============================================================================
 
-function ExamList({ exams, loading, deletingExamId, deleteError, onCreateNew, onDelete }) {
+function ExamList({ exams, loading, onCreateNew }) {
   return (
     <div className="flex flex-col gap-4">
       <button
@@ -374,23 +354,9 @@ function ExamList({ exams, loading, deletingExamId, deleteError, onCreateNew, on
               >
                 Open link →
               </a>
-              <button
-                type="button"
-                onClick={() => onDelete(exam)}
-                disabled={deletingExamId === exam.id}
-                className="text-sm text-red-600 hover:text-red-800 disabled:opacity-50 whitespace-nowrap ml-4"
-              >
-                {deletingExamId === exam.id ? 'Deleting…' : 'Delete'}
-              </button>
             </div>
           ))}
         </div>
-      )}
-
-      {deleteError && (
-        <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-          {deleteError}
-        </p>
       )}
     </div>
   );
@@ -466,6 +432,19 @@ function ExamMetaForm({
 function QuestionEditor({ index, question, canRemove, onChange, onOptionChange, onRemove }) {
   return (
     <div className="border rounded-xl p-5 flex flex-col gap-3">
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">
+          Section (optional — leave blank if this exam has no sections)
+        </label>
+        <input
+          type="text"
+          value={question.section_title}
+          onChange={(e) => onChange({ section_title: e.target.value })}
+          placeholder="e.g. Part A — Multiple Choice"
+          className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
       <div className="flex items-start justify-between gap-3">
         <span className="text-sm font-semibold text-gray-500 mt-2">Q{index + 1}</span>
         <textarea
