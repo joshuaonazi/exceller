@@ -446,6 +446,10 @@ function ExamList({ exams, loading, onCreateNew, onDelete, deletingId }) {
                   {exam.duration_minutes} min · Code: {exam.access_code} ·{' '}
                   {exam.show_results_to_students ? 'Shows results' : 'Hides results'}
                 </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Created {new Date(exam.created_at).toLocaleDateString()} at{' '}
+                  {new Date(exam.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
               </div>
               <div className="flex items-center gap-4 ml-4">
                 <a
