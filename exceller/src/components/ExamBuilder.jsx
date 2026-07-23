@@ -103,6 +103,26 @@ export default function ExamBuilder() {
     loadMyExams();
   }, [loadMyExams]);
 
+  const [deletingId, setDeletingId] = useState(null);
+
+  const deleteExam = async (examToDelete) => {
+    const confirmed = window.confirm(
+      `Delete "${examToDelete.title}"? This permanently removes the exam, all its questions, and every student submission for it. This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setDeletingId(examToDelete.id);
+    try {
+      const { error } = await supabase.from('exams').delete().eq('id', examToDelete.id);
+      if (error) throw error;
+      setMyExams((prev) => prev.filter((e) => e.id !== examToDelete.id));
+    } catch (err) {
+      alert(`Could not delete exam: ${err.message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   // ==========================================================================
   // Section helpers
   // ==========================================================================
@@ -315,7 +335,13 @@ export default function ExamBuilder() {
       </header>
 
       {view === 'list' && (
-        <ExamList exams={myExams} loading={loadingExams} onCreateNew={() => setView('create')} />
+        <ExamList
+          exams={myExams}
+          loading={loadingExams}
+          onCreateNew={() => setView('create')}
+          onDelete={deleteExam}
+          deletingId={deletingId}
+        />
       )}
 
       {view === 'create' && (
@@ -396,7 +422,7 @@ export default function ExamBuilder() {
 // Sub-components
 // ============================================================================
 
-function ExamList({ exams, loading, onCreateNew }) {
+function ExamList({ exams, loading, onCreateNew, onDelete, deletingId }) {
   return (
     <div className="flex flex-col gap-4">
       <button
@@ -421,20 +447,29 @@ function ExamList({ exams, loading, onCreateNew }) {
                   {exam.show_results_to_students ? 'Shows results' : 'Hides results'}
                 </p>
               </div>
-              <a
-                href={`/test/${exam.id}`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-sm text-blue-600 hover:underline whitespace-nowrap ml-4"
-              >
-                Open link →
-              </a>
-              <a
-                href={`/submissions/${exam.id}`}
-                className="text-sm text-gray-600 hover:underline whitespace-nowrap ml-4"
-              >
-                View submissions →
-              </a>
+              <div className="flex items-center gap-4 ml-4">
+                <a
+                  href={`/test/${exam.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-blue-600 hover:underline whitespace-nowrap"
+                >
+                  Open link →
+                </a>
+                <a
+                  href={`/submissions/${exam.id}`}
+                  className="text-sm text-gray-600 hover:underline whitespace-nowrap"
+                >
+                  View submissions →
+                </a>
+                <button
+                  onClick={() => onDelete(exam)}
+                  disabled={deletingId === exam.id}
+                  className="text-sm text-red-500 hover:text-red-700 whitespace-nowrap disabled:opacity-50"
+                >
+                  {deletingId === exam.id ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
             </div>
           ))}
         </div>
