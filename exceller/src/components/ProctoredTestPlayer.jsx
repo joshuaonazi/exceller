@@ -53,6 +53,15 @@ export default function ProctoredTestPlayer() {
   // Guard against double-submit (timer + strike limit racing each other).
   const hasSubmittedRef = useRef(false);
 
+  // The timer's setInterval is set up once per test session (see the timer
+  // effect below, which only depends on `phase`). Without this ref, that
+  // interval would keep calling the very first `handleSubmit` closure it
+  // captured — from the moment the test started, when `answers` was still
+  // empty — instead of the current one. This ref always points at the
+  // latest version, so auto-submit-on-timeout includes whatever the
+  // student has actually selected.
+  const handleSubmitRef = useRef(null);
+
   // ==========================================================================
   // 1. AUTH GATE — Supabase Google OAuth
   // ==========================================================================
@@ -180,7 +189,7 @@ export default function ProctoredTestPlayer() {
       setSecondsLeft(remaining);
 
       if (remaining <= 0) {
-        handleSubmit({ autoSubmitted: true });
+        handleSubmitRef.current?.({ autoSubmitted: true });
       }
     };
 
@@ -204,7 +213,7 @@ export default function ProctoredTestPlayer() {
         setShowStrikeWarning(true);
 
         if (count >= MAX_TAB_STRIKES) {
-          handleSubmit({ autoSubmitted: true });
+          handleSubmitRef.current?.({ autoSubmitted: true });
         }
       }
     };
@@ -260,9 +269,9 @@ export default function ProctoredTestPlayer() {
     [answers, examId, tabStrikes]
   );
 
-  // ==========================================================================
-  // RENDER
-  // ==========================================================================
+  useEffect(() => {
+    handleSubmitRef.current = handleSubmit;
+  }, [handleSubmit]);
 
   if (phase === 'checking_auth' || phase === 'loading_exam' || phase === 'submitting') {
     return <CenteredMessage text="Loading…" />;
