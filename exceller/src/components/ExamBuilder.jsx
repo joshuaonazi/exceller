@@ -429,6 +429,12 @@ function ExamList({ exams, loading, onCreateNew }) {
               >
                 Open link →
               </a>
+              <a
+                href={`/submissions/${exam.id}`}
+                className="text-sm text-gray-600 hover:underline whitespace-nowrap ml-4"
+              >
+                View submissions →
+              </a>
             </div>
           ))}
         </div>

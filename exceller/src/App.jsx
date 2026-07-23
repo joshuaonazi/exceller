@@ -2,6 +2,7 @@
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import ProctoredTestPlayer from './components/ProctoredTestPlayer';
 import ExamBuilder from './components/ExamBuilder';
+import SubmissionsDashboard from './components/SubmissionsDashboard';
 
 export default function App() {
   return (
@@ -9,6 +10,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/builder" element={<ExamBuilder />} />
+        <Route path="/submissions/:examId" element={<SubmissionsDashboard />} />
         <Route path="/test/:examId" element={<ProctoredTestPlayer />} />
       </Routes>
     </BrowserRouter>
