@@ -1,6 +1,12 @@
 // src/components/ExamBuilder.jsx
 //
 // Admin-side dynamic exam builder.
+// Structure: an exam has one or more SECTIONS, and each section has one or
+// more QUESTIONS. Sections are the primary organizing unit — you add a
+// section once, then add as many questions as you like inside it (10, 20,
+// whatever), rather than tagging every individual question with a repeated
+// label.
+//
 // Assumes a configured Supabase client exported from ../lib/supabaseClient.js
 // and that the signed-in user reaches this route already authenticated
 // (wrap this route in your own admin-auth guard / layout).
@@ -13,11 +19,18 @@ const EMPTY_OPTION_KEYS = ['A', 'B', 'C', 'D'];
 function blankQuestion() {
   return {
     tempId: crypto.randomUUID(),
-    section_title: '',
     question_text: '',
     options: { A: '', B: '', C: '', D: '' },
     correct_answer: 'A',
     points: 1,
+  };
+}
+
+function blankSection(label) {
+  return {
+    tempId: crypto.randomUUID(),
+    title: label || '',
+    questions: [blankQuestion()],
   };
 }
 
@@ -43,15 +56,15 @@ export default function ExamBuilder() {
   const [accessCode, setAccessCode] = useState(randomAccessCode());
   const [showResults, setShowResults] = useState(true);
 
-  // ---- Questions ------------------------------------------------------------
-  const [questions, setQuestions] = useState([blankQuestion()]);
+  // ---- Sections (each containing its own questions) ------------------------
+  const [sections, setSections] = useState([blankSection('Section 1')]);
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [createdExam, setCreatedExam] = useState(null);
 
   // ==========================================================================
-  // Auth + load this admin's exams
+  // Auth
   // ==========================================================================
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -91,24 +104,65 @@ export default function ExamBuilder() {
   }, [loadMyExams]);
 
   // ==========================================================================
-  // Question list helpers
+  // Section helpers
   // ==========================================================================
-  const addQuestion = () =>
-    setQuestions((prev) => {
-      const lastSection = prev.length > 0 ? prev[prev.length - 1].section_title : '';
-      return [...prev, { ...blankQuestion(), section_title: lastSection }];
-    });
+  const addSection = () =>
+    setSections((prev) => [...prev, blankSection(`Section ${prev.length + 1}`)]);
 
-  const removeQuestion = (tempId) =>
-    setQuestions((prev) => prev.filter((q) => q.tempId !== tempId));
+  const removeSection = (sectionId) =>
+    setSections((prev) => prev.filter((s) => s.tempId !== sectionId));
 
-  const updateQuestion = (tempId, patch) =>
-    setQuestions((prev) => prev.map((q) => (q.tempId === tempId ? { ...q, ...patch } : q)));
+  const updateSectionTitle = (sectionId, newTitle) =>
+    setSections((prev) =>
+      prev.map((s) => (s.tempId === sectionId ? { ...s, title: newTitle } : s))
+    );
 
-  const updateOption = (tempId, key, value) =>
-    setQuestions((prev) =>
-      prev.map((q) =>
-        q.tempId === tempId ? { ...q, options: { ...q.options, [key]: value } } : q
+  // ==========================================================================
+  // Question helpers (scoped to a specific section)
+  // ==========================================================================
+  const addQuestion = (sectionId) =>
+    setSections((prev) =>
+      prev.map((s) =>
+        s.tempId === sectionId ? { ...s, questions: [...s.questions, blankQuestion()] } : s
+      )
+    );
+
+  const removeQuestion = (sectionId, questionTempId) =>
+    setSections((prev) =>
+      prev.map((s) =>
+        s.tempId === sectionId
+          ? { ...s, questions: s.questions.filter((q) => q.tempId !== questionTempId) }
+          : s
+      )
+    );
+
+  const updateQuestion = (sectionId, questionTempId, patch) =>
+    setSections((prev) =>
+      prev.map((s) =>
+        s.tempId === sectionId
+          ? {
+              ...s,
+              questions: s.questions.map((q) =>
+                q.tempId === questionTempId ? { ...q, ...patch } : q
+              ),
+            }
+          : s
+      )
+    );
+
+  const updateOption = (sectionId, questionTempId, key, value) =>
+    setSections((prev) =>
+      prev.map((s) =>
+        s.tempId === sectionId
+          ? {
+              ...s,
+              questions: s.questions.map((q) =>
+                q.tempId === questionTempId
+                  ? { ...q, options: { ...q.options, [key]: value } }
+                  : q
+              ),
+            }
+          : s
       )
     );
 
@@ -119,21 +173,27 @@ export default function ExamBuilder() {
     if (!title.trim()) return 'Exam title is required.';
     if (!durationMinutes || durationMinutes <= 0) return 'Duration must be greater than 0.';
     if (!accessCode.trim()) return 'Access code is required.';
-    if (questions.length === 0) return 'Add at least one question.';
+    if (sections.length === 0) return 'Add at least one section.';
 
-    for (const [idx, q] of questions.entries()) {
-      if (!q.question_text.trim()) return `Question ${idx + 1} is missing its text.`;
-      const filledOptions = Object.values(q.options).filter((v) => v.trim() !== '');
-      if (filledOptions.length < 2) return `Question ${idx + 1} needs at least 2 options.`;
-      if (!q.options[q.correct_answer]?.trim())
-        return `Question ${idx + 1}'s correct answer points to an empty option.`;
-      if (!q.points || q.points <= 0) return `Question ${idx + 1} needs points greater than 0.`;
+    for (const [sIdx, section] of sections.entries()) {
+      if (section.questions.length === 0) {
+        return `Section ${sIdx + 1} ("${section.title || 'Untitled'}") needs at least one question.`;
+      }
+      for (const [qIdx, q] of section.questions.entries()) {
+        const label = `Section ${sIdx + 1}, Question ${qIdx + 1}`;
+        if (!q.question_text.trim()) return `${label} is missing its text.`;
+        const filledOptions = Object.values(q.options).filter((v) => v.trim() !== '');
+        if (filledOptions.length < 2) return `${label} needs at least 2 options.`;
+        if (!q.options[q.correct_answer]?.trim())
+          return `${label}'s correct answer points to an empty option.`;
+        if (!q.points || q.points <= 0) return `${label} needs points greater than 0.`;
+      }
     }
     return null;
   };
 
   // ==========================================================================
-  // Save exam + questions
+  // Save exam + sections' questions
   // ==========================================================================
   const handleSave = async () => {
     setSaveError('');
@@ -158,21 +218,30 @@ export default function ExamBuilder() {
         .single();
       if (examErr) throw examErr;
 
-      const questionRows = questions.map((q, idx) => {
-        // Strip out any options left blank.
-        const cleanOptions = Object.fromEntries(
-          Object.entries(q.options).filter(([, v]) => v.trim() !== '')
-        );
-        return {
-          exam_id: examRow.id,
-          section_title: q.section_title.trim() || null,
-          question_text: q.question_text.trim(),
-          options: cleanOptions,
-          correct_answer: q.correct_answer,
-          points: Number(q.points),
-          question_order: idx,
-        };
-      });
+      // Flatten sections -> question rows, with a single running
+      // question_order across the whole exam so ordering is preserved
+      // end-to-end (section boundaries are implied by section_title
+      // staying constant across consecutive rows).
+      const questionRows = [];
+      let runningOrder = 0;
+      for (const section of sections) {
+        const sectionLabel = section.title.trim() || null;
+        for (const q of section.questions) {
+          const cleanOptions = Object.fromEntries(
+            Object.entries(q.options).filter(([, v]) => v.trim() !== '')
+          );
+          questionRows.push({
+            exam_id: examRow.id,
+            section_title: sectionLabel,
+            question_text: q.question_text.trim(),
+            options: cleanOptions,
+            correct_answer: q.correct_answer,
+            points: Number(q.points),
+            question_order: runningOrder,
+          });
+          runningOrder += 1;
+        }
+      }
 
       const { error: qErr } = await supabase.from('questions').insert(questionRows);
       if (qErr) throw qErr;
@@ -192,7 +261,7 @@ export default function ExamBuilder() {
     setDurationMinutes(30);
     setAccessCode(randomAccessCode());
     setShowResults(true);
-    setQuestions([blankQuestion()]);
+    setSections([blankSection('Section 1')]);
     setSaveError('');
     setCreatedExam(null);
   };
@@ -223,6 +292,8 @@ export default function ExamBuilder() {
     );
   }
 
+  const totalQuestionCount = sections.reduce((sum, s) => sum + s.questions.length, 0);
+
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
       <header className="flex items-center justify-between mb-8">
@@ -244,11 +315,7 @@ export default function ExamBuilder() {
       </header>
 
       {view === 'list' && (
-        <ExamList
-          exams={myExams}
-          loading={loadingExams}
-          onCreateNew={() => setView('create')}
-        />
+        <ExamList exams={myExams} loading={loadingExams} onCreateNew={() => setView('create')} />
       )}
 
       {view === 'create' && (
@@ -264,26 +331,34 @@ export default function ExamBuilder() {
             setShowResults={setShowResults}
           />
 
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Questions ({questions.length})</h2>
+              <h2 className="text-lg font-semibold">
+                Sections ({sections.length}) · {totalQuestionCount} question
+                {totalQuestionCount !== 1 ? 's' : ''} total
+              </h2>
               <button
-                onClick={addQuestion}
-                className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg"
+                onClick={addSection}
+                className="text-sm bg-blue-600 text-white hover:bg-blue-700 px-3 py-1.5 rounded-lg"
               >
-                + Add Question
+                + Add Section
               </button>
             </div>
 
-            {questions.map((q, idx) => (
-              <QuestionEditor
-                key={q.tempId}
-                index={idx}
-                question={q}
-                canRemove={questions.length > 1}
-                onChange={(patch) => updateQuestion(q.tempId, patch)}
-                onOptionChange={(key, value) => updateOption(q.tempId, key, value)}
-                onRemove={() => removeQuestion(q.tempId)}
+            {sections.map((section, sIdx) => (
+              <SectionEditor
+                key={section.tempId}
+                index={sIdx}
+                section={section}
+                canRemoveSection={sections.length > 1}
+                onTitleChange={(newTitle) => updateSectionTitle(section.tempId, newTitle)}
+                onRemoveSection={() => removeSection(section.tempId)}
+                onAddQuestion={() => addQuestion(section.tempId)}
+                onRemoveQuestion={(qId) => removeQuestion(section.tempId, qId)}
+                onQuestionChange={(qId, patch) => updateQuestion(section.tempId, qId, patch)}
+                onOptionChange={(qId, key, value) =>
+                  updateOption(section.tempId, qId, key, value)
+                }
               />
             ))}
           </div>
@@ -429,22 +504,68 @@ function ExamMetaForm({
   );
 }
 
-function QuestionEditor({ index, question, canRemove, onChange, onOptionChange, onRemove }) {
+// ---- Section editor: a titled container holding N question editors --------
+function SectionEditor({
+  index,
+  section,
+  canRemoveSection,
+  onTitleChange,
+  onRemoveSection,
+  onAddQuestion,
+  onRemoveQuestion,
+  onQuestionChange,
+  onOptionChange,
+}) {
   return (
-    <div className="border rounded-xl p-5 flex flex-col gap-3">
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">
-          Section (optional — leave blank if this exam has no sections)
-        </label>
+    <div className="border-2 border-blue-100 rounded-2xl p-5 flex flex-col gap-4 bg-blue-50/30">
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-semibold text-blue-600 whitespace-nowrap">
+          SECTION {index + 1}
+        </span>
         <input
           type="text"
-          value={question.section_title}
-          onChange={(e) => onChange({ section_title: e.target.value })}
-          placeholder="e.g. Part A — Multiple Choice"
-          className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={section.title}
+          onChange={(e) => onTitleChange(e.target.value)}
+          placeholder="Section title (e.g. Part A — Multiple Choice)"
+          className="flex-1 border rounded-lg px-3 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
         />
+        {canRemoveSection && (
+          <button
+            onClick={onRemoveSection}
+            className="text-xs text-red-500 hover:text-red-700 whitespace-nowrap"
+          >
+            Remove section
+          </button>
+        )}
       </div>
 
+      <div className="flex flex-col gap-4 pl-1">
+        {section.questions.map((q, qIdx) => (
+          <QuestionEditor
+            key={q.tempId}
+            index={qIdx}
+            question={q}
+            canRemove={section.questions.length > 1}
+            onChange={(patch) => onQuestionChange(q.tempId, patch)}
+            onOptionChange={(key, value) => onOptionChange(q.tempId, key, value)}
+            onRemove={() => onRemoveQuestion(q.tempId)}
+          />
+        ))}
+      </div>
+
+      <button
+        onClick={onAddQuestion}
+        className="self-start text-sm bg-white border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-lg"
+      >
+        + Add Question to this section
+      </button>
+    </div>
+  );
+}
+
+function QuestionEditor({ index, question, canRemove, onChange, onOptionChange, onRemove }) {
+  return (
+    <div className="border rounded-xl p-5 flex flex-col gap-3 bg-white">
       <div className="flex items-start justify-between gap-3">
         <span className="text-sm font-semibold text-gray-500 mt-2">Q{index + 1}</span>
         <textarea
@@ -489,15 +610,10 @@ function QuestionEditor({ index, question, canRemove, onChange, onOptionChange, 
           </div>
         ))}
       </div>
-      <p className="text-xs text-gray-400">
-        Select the radio button next to the correct option.
-      </p>
+      <p className="text-xs text-gray-400">Select the radio button next to the correct option.</p>
 
       {canRemove && (
-        <button
-          onClick={onRemove}
-          className="self-end text-xs text-red-500 hover:text-red-700"
-        >
+        <button onClick={onRemove} className="self-end text-xs text-red-500 hover:text-red-700">
           Remove question
         </button>
       )}
