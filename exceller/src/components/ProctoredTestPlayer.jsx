@@ -29,6 +29,7 @@ export default function ProctoredTestPlayer() {
 
   // ---- Access code gate -----------------------------------------------
   const [accessCodeInput, setAccessCodeInput] = useState('');
+  const [fullNameInput, setFullNameInput] = useState('');
   const [codeError, setCodeError] = useState('');
 
   // ---- Exam data ------------------------------------------------------
@@ -89,6 +90,11 @@ export default function ProctoredTestPlayer() {
     e.preventDefault();
     setCodeError('');
 
+    if (!fullNameInput.trim()) {
+      setCodeError('Please enter your full name.');
+      return;
+    }
+
     const { data: isValid, error } = await supabase.rpc('verify_access_code', {
       p_exam_id: examId,
       p_code: accessCodeInput.trim(),
@@ -114,6 +120,7 @@ export default function ProctoredTestPlayer() {
       const { data: attemptRows, error: attemptErr } = await supabase.rpc('start_attempt', {
         p_exam_id: examId,
         p_code: accessCodeInput.trim(),
+        p_full_name: fullNameInput.trim(),
       });
       if (attemptErr) throw attemptErr;
 
@@ -278,14 +285,33 @@ export default function ProctoredTestPlayer() {
         <h1 className="text-xl font-semibold mb-4">Enter Access Code</h1>
         <p className="text-gray-600 mb-4">Signed in as {user?.email}</p>
         <form onSubmit={submitAccessCode} className="flex flex-col gap-3">
-          <input
-            type="text"
-            value={accessCodeInput}
-            onChange={(e) => setAccessCodeInput(e.target.value)}
-            placeholder="Access code"
-            className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            autoFocus
-          />
+          <div className="text-left">
+            <label className="block text-sm font-medium mb-1">
+              Full Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={fullNameInput}
+              onChange={(e) => setFullNameInput(e.target.value)}
+              placeholder="Enter your full name as it should appear on record"
+              required
+              className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              autoFocus
+            />
+          </div>
+          <div className="text-left">
+            <label className="block text-sm font-medium mb-1">
+              Access Code <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={accessCodeInput}
+              onChange={(e) => setAccessCodeInput(e.target.value)}
+              placeholder="Access code"
+              required
+              className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
           {codeError && <p className="text-red-600 text-sm">{codeError}</p>}
           <button
             type="submit"
