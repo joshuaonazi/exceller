@@ -92,8 +92,7 @@ export default function ExamBuilder() {
     setLoadingExams(true);
     const { data, error } = await supabase
       .from('exams')
-      .select('id, title, duration_minutes, access_code, show_results_to_students, created_at')
-      .eq('created_by', user.id)
+      .select('id, title, duration_minutes, access_code, show_results_to_students, created_at, created_by')
       .order('created_at', { ascending: false });
 
     if (!error) {
@@ -379,6 +378,7 @@ export default function ExamBuilder() {
           onDelete={deleteExam}
           deletingId={deletingId}
           submissionCounts={submissionCounts}
+          currentUserId={user.id}
         />
       )}
 
@@ -462,7 +462,7 @@ export default function ExamBuilder() {
 // Sub-components
 // ============================================================================
 
-function ExamList({ exams, loading, onCreateNew, onDelete, deletingId, submissionCounts }) {
+function ExamList({ exams, loading, onCreateNew, onDelete, deletingId, submissionCounts, currentUserId }) {
   return (
     <div className="flex flex-col gap-4">
       <button
@@ -508,13 +508,15 @@ function ExamList({ exams, loading, onCreateNew, onDelete, deletingId, submissio
                   )}
                   <span>→</span>
                 </a>
-                <button
-                  onClick={() => onDelete(exam)}
-                  disabled={deletingId === exam.id}
-                  className="text-sm text-red-500 hover:text-red-700 whitespace-nowrap disabled:opacity-50"
-                >
-                  {deletingId === exam.id ? 'Deleting…' : 'Delete'}
-                </button>
+                {exam.created_by === currentUserId && (
+                  <button
+                    onClick={() => onDelete(exam)}
+                    disabled={deletingId === exam.id}
+                    className="text-sm text-red-500 hover:text-red-700 whitespace-nowrap disabled:opacity-50"
+                  >
+                    {deletingId === exam.id ? 'Deleting…' : 'Delete'}
+                  </button>
+                )}
               </div>
             </div>
           ))}
