@@ -30,7 +30,13 @@ export default function ProctoredTestPlayer() {
   // ---- Access code gate -----------------------------------------------
   const [accessCodeInput, setAccessCodeInput] = useState('');
   const [fullNameInput, setFullNameInput] = useState('');
+  const [genderInput, setGenderInput] = useState('');
+  const [regionInput, setRegionInput] = useState('');
+  const [countryInput, setCountryInput] = useState('');
   const [codeError, setCodeError] = useState('');
+
+  // ---- Instructions (shown after code verification, before the timer starts)
+  const [examInstructions, setExamInstructions] = useState('');
 
   // ---- Exam data ------------------------------------------------------
   const [examTitle, setExamTitle] = useState('');
@@ -107,11 +113,14 @@ export default function ProctoredTestPlayer() {
   useEffect(() => {
     supabase
       .from('exams_public')
-      .select('title')
+      .select('title, instructions')
       .eq('id', examId)
       .single()
       .then(({ data }) => {
-        if (data) setExamTitle(data.title);
+        if (data) {
+          setExamTitle(data.title);
+          setExamInstructions(data.instructions || '');
+        }
       });
   }, [examId, user]);
   const submitAccessCode = async (e) => {
@@ -120,6 +129,18 @@ export default function ProctoredTestPlayer() {
 
     if (!fullNameInput.trim()) {
       setCodeError('Please enter your full name.');
+      return;
+    }
+    if (!genderInput.trim()) {
+      setCodeError('Please select your gender.');
+      return;
+    }
+    if (!regionInput.trim()) {
+      setCodeError('Please enter your city/state/region.');
+      return;
+    }
+    if (!countryInput.trim()) {
+      setCodeError('Please enter your country.');
       return;
     }
 
@@ -133,6 +154,21 @@ export default function ProctoredTestPlayer() {
       return;
     }
 
+    // The timer has NOT started yet at this point — access code
+    // verification and actually starting the attempt are deliberately
+    // separate steps, so reading instructions doesn't eat into exam time.
+    if (examInstructions.trim()) {
+      setPhase('instructions');
+    } else {
+      setPhase('loading_exam');
+      await beginAttempt();
+    }
+  };
+
+  // Called when the student clicks "Start Exam" on the instructions screen
+  // (or immediately after code verification, if there were no instructions
+  // to show). This is the point the timer actually begins.
+  const startExamNow = async () => {
     setPhase('loading_exam');
     await beginAttempt();
   };
@@ -149,19 +185,14 @@ export default function ProctoredTestPlayer() {
         p_exam_id: examId,
         p_code: accessCodeInput.trim(),
         p_full_name: fullNameInput.trim(),
+        p_gender: genderInput.trim(),
+        p_region: regionInput.trim(),
+        p_country: countryInput.trim(),
       });
       if (attemptErr) throw attemptErr;
 
       const { started_at, duration_minutes, show_results, already_submitted, prior_score } =
         attemptRows[0];
-
-      const { data: examMeta, error: examMetaErr } = await supabase
-        .from('exams_public')
-        .select('title')
-        .eq('id', examId)
-        .single();
-      if (examMetaErr) throw examMetaErr;
-      setExamTitle(examMeta.title);
 
       // Student already completed this exam — refresh/re-entry must NOT
       // let them retake it. Route straight to the result screen instead.
@@ -405,6 +436,48 @@ export default function ProctoredTestPlayer() {
           </div>
           <div className="text-left">
             <label className="block text-sm font-medium mb-1">
+              Gender <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={genderInput}
+              onChange={(e) => setGenderInput(e.target.value)}
+              required
+              className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">Select…</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Prefer not to say">Prefer not to say</option>
+            </select>
+          </div>
+          <div className="text-left">
+            <label className="block text-sm font-medium mb-1">
+              City/State/Region <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={regionInput}
+              onChange={(e) => setRegionInput(e.target.value)}
+              placeholder="e.g. Ibadan, Oyo State"
+              required
+              className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="text-left">
+            <label className="block text-sm font-medium mb-1">
+              Country <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={countryInput}
+              onChange={(e) => setCountryInput(e.target.value)}
+              placeholder="e.g. Nigeria"
+              required
+              className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="text-left">
+            <label className="block text-sm font-medium mb-1">
               Access Code <span className="text-red-500">*</span>
             </label>
             <input
@@ -424,6 +497,27 @@ export default function ProctoredTestPlayer() {
             Unlock Exam
           </button>
         </form>
+      </CenteredCard>
+    );
+  }
+
+  if (phase === 'instructions') {
+    return (
+      <CenteredCard>
+        <p className="text-sm font-semibold tracking-wide text-blue-600 mb-1">EXCELLER</p>
+        <h1 className="text-xl font-semibold mb-4">{examTitle}</h1>
+        <div className="text-left bg-gray-50 border rounded-lg p-4 mb-6 whitespace-pre-wrap text-gray-700 text-sm">
+          {examInstructions}
+        </div>
+        <p className="text-xs text-gray-400 mb-4">
+          The timer starts as soon as you click below — make sure you're ready.
+        </p>
+        <button
+          onClick={startExamNow}
+          className="bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 transition font-medium"
+        >
+          Start Exam
+        </button>
       </CenteredCard>
     );
   }

@@ -55,6 +55,7 @@ export default function ExamBuilder() {
   const [durationMinutes, setDurationMinutes] = useState(30);
   const [accessCode, setAccessCode] = useState(randomAccessCode());
   const [showResults, setShowResults] = useState(true);
+  const [instructions, setInstructions] = useState('');
 
   // ---- Sections (each containing its own questions) ------------------------
   const [sections, setSections] = useState([blankSection('Section 1')]);
@@ -266,6 +267,7 @@ export default function ExamBuilder() {
           duration_minutes: Number(durationMinutes),
           access_code: accessCode.trim(),
           show_results_to_students: showResults,
+          instructions: instructions.trim() || null,
           created_by: user.id,
         })
         .select()
@@ -315,6 +317,7 @@ export default function ExamBuilder() {
     setDurationMinutes(30);
     setAccessCode(randomAccessCode());
     setShowResults(true);
+    setInstructions('');
     setSections([blankSection('Section 1')]);
     setSaveError('');
     setCreatedExam(null);
@@ -390,6 +393,8 @@ export default function ExamBuilder() {
             setAccessCode={setAccessCode}
             showResults={showResults}
             setShowResults={setShowResults}
+            instructions={instructions}
+            setInstructions={setInstructions}
           />
 
           <div className="flex flex-col gap-6">
@@ -528,6 +533,8 @@ function ExamMetaForm({
   setAccessCode,
   showResults,
   setShowResults,
+  instructions,
+  setInstructions,
 }) {
   return (
     <div className="border rounded-xl p-5 flex flex-col gap-4">
@@ -540,6 +547,22 @@ function ExamMetaForm({
           placeholder="e.g. Midterm — Data Structures"
           className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-1">
+          Instructions <span className="text-gray-400 font-normal">(optional)</span>
+        </label>
+        <textarea
+          value={instructions}
+          onChange={(e) => setInstructions(e.target.value)}
+          placeholder="e.g. Read each question carefully. You have 30 minutes. Do not refresh the page once you start."
+          rows={3}
+          className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <p className="text-xs text-gray-400 mt-1">
+          Shown to students after they enter the access code, before the timer starts.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
