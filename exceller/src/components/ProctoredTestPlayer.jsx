@@ -63,6 +63,15 @@ export default function ProctoredTestPlayer() {
   // student has actually selected.
   const handleSubmitRef = useRef(null);
 
+  // Same stale-closure concern as handleSubmitRef above — this interval is
+  // set up once and must not be recreated on every keystroke, so it reads
+  // the latest answers via a ref rather than closing over the `answers`
+  // state directly.
+  const answersRef = useRef(answers);
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
   // ==========================================================================
   // 1. AUTH GATE — Supabase Google OAuth
   // ==========================================================================
@@ -186,6 +195,23 @@ export default function ProctoredTestPlayer() {
       if (qErr) throw qErr;
 
       setQuestions(qData);
+
+      // Restore any answers that were autosaved before a refresh/disconnect,
+      // so reconnecting resumes the test instead of showing it blank.
+      const { data: existingSubmission } = await supabase
+        .from('submissions')
+        .select('answers')
+        .eq('exam_id', examId)
+        .single();
+
+      if (existingSubmission?.answers?.length) {
+        const restoredAnswers = {};
+        for (const a of existingSubmission.answers) {
+          restoredAnswers[a.q_id] = a.choice;
+        }
+        setAnswers(restoredAnswers);
+      }
+
       setPhase('testing');
     } catch (err) {
       setErrorMsg(err.message || 'Could not start the exam.');
@@ -247,6 +273,45 @@ export default function ProctoredTestPlayer() {
   const blockClipboardEvent = useCallback((e) => {
     e.preventDefault();
   }, []);
+
+  // ==========================================================================
+  // 6b. AUTOSAVE — persist in-progress answers so a hard disconnect or
+  // refresh doesn't lose everything the student has already picked.
+  // Debounced on change (fires ~1.5s after the last click, not on every
+  // single one), PLUS a periodic safety-net save every 20s in case a
+  // network blip swallows the debounced call. Never fires after the
+  // exam has actually been submitted.
+  // ==========================================================================
+  useEffect(() => {
+    if (phase !== 'testing') return;
+    if (Object.keys(answers).length === 0) return;
+
+    const timeout = setTimeout(() => {
+      if (hasSubmittedRef.current) return;
+      const payload = Object.entries(answers).map(([q_id, choice]) => ({ q_id, choice }));
+      supabase.rpc('autosave_answers', { p_exam_id: examId, p_answers: payload });
+      // Errors are deliberately swallowed here — a failed autosave isn't
+      // fatal, since the NEXT successful save always sends the complete
+      // answer set (not just a delta), so nothing is permanently lost as
+      // long as some later save gets through before submission.
+    }, 1500);
+
+    return () => clearTimeout(timeout);
+  }, [answers, phase, examId]);
+
+  useEffect(() => {
+    if (phase !== 'testing') return;
+
+    const interval = setInterval(() => {
+      if (hasSubmittedRef.current) return;
+      const currentAnswers = answersRef.current;
+      if (Object.keys(currentAnswers).length === 0) return;
+      const payload = Object.entries(currentAnswers).map(([q_id, choice]) => ({ q_id, choice }));
+      supabase.rpc('autosave_answers', { p_exam_id: examId, p_answers: payload });
+    }, 20000);
+
+    return () => clearInterval(interval);
+  }, [phase, examId]);
 
   // ==========================================================================
   // 7. ANSWER SELECTION
