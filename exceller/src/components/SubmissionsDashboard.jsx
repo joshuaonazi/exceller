@@ -79,7 +79,7 @@ export default function SubmissionsDashboard() {
       const { data: subData, error: subErr } = await supabase
         .from('submissions')
         .select(
-          'id, student_name, student_email, score, total_points, tab_switch_count, time_taken_seconds, auto_submitted, submitted_at, answers'
+          'id, student_name, student_email, gender, region, country, score, total_points, tab_switch_count, time_taken_seconds, auto_submitted, submitted_at, answers'
         )
         .eq('exam_id', examId)
         .order('submitted_at', { ascending: false, nullsFirst: false });
@@ -172,6 +172,9 @@ export default function SubmissionsDashboard() {
                   <td className="px-4 py-3">
                     <p className="font-medium">{sub.student_name || '—'}</p>
                     <p className="text-gray-500 text-xs">{sub.student_email}</p>
+                    <p className="text-gray-400 text-xs">
+                      {[sub.gender, sub.region, sub.country].filter(Boolean).join(' · ')}
+                    </p>
                   </td>
                   <td className="px-4 py-3">
                     {sub.submitted_at ? `${sub.score} / ${sub.total_points}` : '—'}
@@ -255,6 +258,11 @@ function SubmissionDetailModal({ submission, questions, onClose }) {
           <div>
             <h2 className="text-lg font-semibold">{submission.student_name}</h2>
             <p className="text-sm text-gray-500">{submission.student_email}</p>
+            <p className="text-sm text-gray-400">
+              {[submission.gender, submission.region, submission.country]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
             <p className="text-sm font-medium text-blue-600 mt-1">
               Score: {submission.score} / {submission.total_points}
             </p>
