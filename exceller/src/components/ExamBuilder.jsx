@@ -95,13 +95,47 @@ export default function ExamBuilder() {
       .eq('created_by', user.id)
       .order('created_at', { ascending: false });
 
-    if (!error) setMyExams(data);
+    if (!error) {
+      setMyExams(data);
+      await loadSubmissionCounts(data.map((e) => e.id));
+    }
     setLoadingExams(false);
   }, [user]);
+
+  const [submissionCounts, setSubmissionCounts] = useState({});
+
+  const loadSubmissionCounts = async (examIds) => {
+    if (!examIds || examIds.length === 0) return;
+
+    const { data, error } = await supabase
+      .from('submissions')
+      .select('exam_id')
+      .in('exam_id', examIds)
+      .not('submitted_at', 'is', null);
+
+    if (error) return; // non-critical — badges just won't show a count
+
+    const counts = {};
+    for (const row of data) {
+      counts[row.exam_id] = (counts[row.exam_id] || 0) + 1;
+    }
+    setSubmissionCounts(counts);
+  };
 
   useEffect(() => {
     loadMyExams();
   }, [loadMyExams]);
+
+  // Lightweight polling so submission counts feel "live" without needing
+  // a full realtime subscription — refreshes every 20s while the admin
+  // is actually looking at the exam list.
+  useEffect(() => {
+    if (view !== 'list') return;
+    const interval = setInterval(() => {
+      loadMyExams();
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [view, loadMyExams]);
 
   const [deletingId, setDeletingId] = useState(null);
 
@@ -341,6 +375,7 @@ export default function ExamBuilder() {
           onCreateNew={() => setView('create')}
           onDelete={deleteExam}
           deletingId={deletingId}
+          submissionCounts={submissionCounts}
         />
       )}
 
@@ -422,7 +457,7 @@ export default function ExamBuilder() {
 // Sub-components
 // ============================================================================
 
-function ExamList({ exams, loading, onCreateNew, onDelete, deletingId }) {
+function ExamList({ exams, loading, onCreateNew, onDelete, deletingId, submissionCounts }) {
   return (
     <div className="flex flex-col gap-4">
       <button
@@ -446,10 +481,6 @@ function ExamList({ exams, loading, onCreateNew, onDelete, deletingId }) {
                   {exam.duration_minutes} min · Code: {exam.access_code} ·{' '}
                   {exam.show_results_to_students ? 'Shows results' : 'Hides results'}
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Created {new Date(exam.created_at).toLocaleDateString()} at{' '}
-                  {new Date(exam.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
               </div>
               <div className="flex items-center gap-4 ml-4">
                 <a
@@ -462,9 +493,15 @@ function ExamList({ exams, loading, onCreateNew, onDelete, deletingId }) {
                 </a>
                 <a
                   href={`/submissions/${exam.id}`}
-                  className="text-sm text-gray-600 hover:underline whitespace-nowrap"
+                  className="text-sm text-gray-600 hover:underline whitespace-nowrap inline-flex items-center gap-1.5"
                 >
-                  View submissions →
+                  View submissions
+                  {!!submissionCounts[exam.id] && (
+                    <span className="bg-blue-600 text-white text-xs font-semibold rounded-full min-w-[1.25rem] h-5 px-1.5 flex items-center justify-center">
+                      {submissionCounts[exam.id]}
+                    </span>
+                  )}
+                  <span>→</span>
                 </a>
                 <button
                   onClick={() => onDelete(exam)}
