@@ -92,7 +92,7 @@ export default function ExamBuilder() {
     setLoadingExams(true);
     const { data, error } = await supabase
       .from('exams')
-      .select('id, title, duration_minutes, access_code, show_results_to_students, created_at, created_by')
+      .select('id, title, duration_minutes, access_code, show_results_to_students, created_at, created_by, is_active')
       .order('created_at', { ascending: false });
 
     if (!error) {
@@ -138,6 +138,21 @@ export default function ExamBuilder() {
   }, [view, loadMyExams]);
 
   const [deletingId, setDeletingId] = useState(null);
+
+  const toggleExamActive = async (exam) => {
+    const { error } = await supabase
+      .from('exams')
+      .update({ is_active: !exam.is_active })
+      .eq('id', exam.id);
+
+    if (error) {
+      alert(`Could not update exam status: ${error.message}`);
+      return;
+    }
+    setMyExams((prev) =>
+      prev.map((e) => (e.id === exam.id ? { ...e, is_active: !e.is_active } : e))
+    );
+  };
 
   const deleteExam = async (examToDelete) => {
     const confirmed = window.confirm(
@@ -376,6 +391,7 @@ export default function ExamBuilder() {
           loading={loadingExams}
           onCreateNew={() => setView('create')}
           onDelete={deleteExam}
+          onToggleActive={toggleExamActive}
           deletingId={deletingId}
           submissionCounts={submissionCounts}
           currentUserId={user.id}
@@ -462,7 +478,16 @@ export default function ExamBuilder() {
 // Sub-components
 // ============================================================================
 
-function ExamList({ exams, loading, onCreateNew, onDelete, deletingId, submissionCounts, currentUserId }) {
+function ExamList({
+  exams,
+  loading,
+  onCreateNew,
+  onDelete,
+  onToggleActive,
+  deletingId,
+  submissionCounts,
+  currentUserId,
+}) {
   return (
     <div className="flex flex-col gap-4">
       <button
@@ -481,7 +506,14 @@ function ExamList({ exams, loading, onCreateNew, onDelete, deletingId, submissio
           {exams.map((exam) => (
             <div key={exam.id} className="border rounded-xl p-4 flex justify-between items-center">
               <div>
-                <p className="font-medium">{exam.title}</p>
+                <p className="font-medium flex items-center gap-2">
+                  {exam.title}
+                  {!exam.is_active && (
+                    <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+                      Closed
+                    </span>
+                  )}
+                </p>
                 <p className="text-sm text-gray-500">
                   {exam.duration_minutes} min · Code: {exam.access_code} ·{' '}
                   {exam.show_results_to_students ? 'Shows results' : 'Hides results'}
@@ -508,6 +540,26 @@ function ExamList({ exams, loading, onCreateNew, onDelete, deletingId, submissio
                   )}
                   <span>→</span>
                 </a>
+                {exam.created_by === currentUserId && (
+                  <a
+                    href={`/builder/edit/${exam.id}`}
+                    className="text-sm text-gray-600 hover:underline whitespace-nowrap"
+                  >
+                    Edit
+                  </a>
+                )}
+                {exam.created_by === currentUserId && (
+                  <button
+                    onClick={() => onToggleActive(exam)}
+                    className={`text-sm whitespace-nowrap ${
+                      exam.is_active
+                        ? 'text-amber-600 hover:text-amber-700'
+                        : 'text-green-600 hover:text-green-700'
+                    }`}
+                  >
+                    {exam.is_active ? 'Close exam' : 'Reopen exam'}
+                  </button>
+                )}
                 {exam.created_by === currentUserId && (
                   <button
                     onClick={() => onDelete(exam)}

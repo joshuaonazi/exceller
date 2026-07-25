@@ -149,7 +149,13 @@ export default function ProctoredTestPlayer() {
       p_code: accessCodeInput.trim(),
     });
 
-    if (error || !isValid) {
+    if (error) {
+      // Surfaces specific messages like "This exam is currently closed"
+      // distinctly from a plain wrong-code guess.
+      setCodeError(error.message);
+      return;
+    }
+    if (!isValid) {
       setCodeError('Incorrect access code. Please check with your invigilator.');
       return;
     }
